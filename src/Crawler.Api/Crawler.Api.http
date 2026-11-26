@@ -1,0 +1,39 @@
+@baseUrl = http://localhost:5080
+
+### Create a crawl job
+# @name create
+POST {{baseUrl}}/api/jobs
+Content-Type: application/json
+X-Correlation-Id: demo-123
+
+{
+  "url": "https://example.com",
+  "maxDepth": 2
+}
+
+### Job status and progress
+GET {{baseUrl}}/api/jobs/{{create.response.body.jobId}}
+
+### Tree of crawled pages
+GET {{baseUrl}}/api/jobs/{{create.response.body.jobId}}/tree
+
+### Outgoing links of a page (take a pageId from the tree)
+GET {{baseUrl}}/api/jobs/{{create.response.body.jobId}}/pages/1/links
+
+### History (most recent first)
+GET {{baseUrl}}/api/jobs?page=1&pageSize=20
+
+### Cancel
+POST {{baseUrl}}/api/jobs/{{create.response.body.jobId}}/cancel
+
+### Validation error (400)
+POST {{baseUrl}}/api/jobs
+Content-Type: application/json
+
+{ "url": "mailto:someone@example.com", "maxDepth": 9 }
+
+### Health
+GET {{baseUrl}}/health
+
+### Worker health
+GET http://localhost:5081/health
