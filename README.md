@@ -221,4 +221,5 @@ PageLinks (Id PK bigint, JobId, PageId FK, Url, IsInternal)
 - If the start URL redirects to another host (for example `example.com` → `www.example.com`), that host is external by definition, so only the start page is crawled.
 - A job is processed by one worker. A very long crawl holds one unacked message, and RabbitMQ's consumer timeout defaults to 30 minutes. The defaults (200 pages, 35 s per request) keep a job well below that in practice.
 - The retry delay is a single fixed TTL (10 s) instead of exponential backoff. Exponential backoff would need one delay queue per step.
+- Links are insert-only (`ON CONFLICT DO NOTHING`). If a page changes between two deliveries of the same message and a link disappears, the old `PageLinks` row stays. The page's link counts and ratio are recalculated, so they are still correct. The fix is to replace a page's links in one transaction when it is re-crawled.
 - `EnsureCreated` doesn't change an existing schema. Drop `data/crawler.db` or the `pgdata` volume after changing the model.
