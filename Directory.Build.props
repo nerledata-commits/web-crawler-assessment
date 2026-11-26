@@ -1,0 +1,10 @@
+<Project>
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <!-- Allows running/tests on a newer local runtime (e.g. only .NET 10 installed). Docker images use .NET 8. -->
+    <RollForward>Major</RollForward>
+  </PropertyGroup>
+</Project>
