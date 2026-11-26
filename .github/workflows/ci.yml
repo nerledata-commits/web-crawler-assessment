@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - run: dotnet restore Crawler.sln
+      - run: dotnet build Crawler.sln --no-restore -c Release
+      - run: dotnet test Crawler.sln --no-build -c Release --logger "console;verbosity=normal"
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run build
+
+  # Runs the whole system with docker compose and crawls a real site end to end.
+  compose-smoke-test:
+    runs-on: ubuntu-latest
+    needs: [backend, frontend]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Start stack
+        run: docker compose up -d --build --wait --wait-timeout 300
+      - name: Health endpoints
+        run: |
+          curl -fsS http://localhost:5080/health
+          curl -fsS http://localhost:5081/health
+          curl -fsS -o /dev/null http://localhost:8080/
+      - name: Crawl through the UI's nginx proxy and wait for completion
+        run: ./scripts/smoke-test.sh http://localhost:8080 https://example.com/
+      - name: Logs on failure
+        if: failure()
+        run: docker compose logs --no-color
+      - name: Stop stack
+        if: always()
+        run: docker compose down -v

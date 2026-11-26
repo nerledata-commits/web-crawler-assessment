@@ -1,0 +1,80 @@
+name: crawler
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: crawler
+      POSTGRES_USER: crawler
+      POSTGRES_PASSWORD: crawler
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U crawler -d crawler"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    ports:
+      - "5672:5672"
+      - "15672:15672" # management UI: http://localhost:15672 (guest/guest)
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 10s
+      retries: 30
+
+  api:
+    build:
+      context: .
+      dockerfile: src/Crawler.Api/Dockerfile
+    environment: &dotnet-env
+      ASPNETCORE_ENVIRONMENT: Production
+      Database__Provider: Postgres
+      ConnectionStrings__Crawler: Host=db;Port=5432;Database=crawler;Username=crawler;Password=crawler
+      RabbitMq__HostName: rabbitmq
+    ports:
+      - "5080:8080"
+    depends_on:
+      db: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/localhost/8080 && printf \"GET /health HTTP/1.0\\r\\n\\r\\n\" >&3 && grep -q \"200 OK\" <&3'"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  worker:
+    build:
+      context: .
+      dockerfile: src/Crawler.Worker/Dockerfile
+    environment:
+      <<: *dotnet-env
+      Crawl__MaxPagesPerJob: "200"
+      RabbitMq__MaxDeliveryAttempts: "3"
+    ports:
+      - "5081:8080" # health: http://localhost:5081/health
+    depends_on:
+      api: { condition: service_healthy } # the API creates the schema
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/localhost/8080 && printf \"GET /health HTTP/1.0\\r\\n\\r\\n\" >&3 && grep -q \"200 OK\" <&3'"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    deploy:
+      replicas: 1 # scale with: docker compose up --scale worker=3 (remove the host port first)
+
+  web:
+    build:
+      context: web
+    ports:
+      - "8080:80" # UI: http://localhost:8080
+    depends_on:
+      - api
+
+volumes:
+  pgdata:
